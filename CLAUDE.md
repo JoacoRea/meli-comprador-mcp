@@ -4,101 +4,49 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Kolmena fork of `@dan1d/mercadolibre-mcp`, published as `@kolmena-ai/meli-mcp`. An MCP server exposing **76 tools** (36 buyer + 40 seller) over the MercadoLibre REST API. Single binary `mercadolibre-mcp` / `meli-mcp` runs on stdio; deployed in production behind `mcp-proxy` (streamable-http on :8000) — see `HANDOFF.md`.
-
-Upstream remote is `upstream` → `https://github.com/dan1d/mercadolibre-mcp.git`. Local dev and sync flow are in `FORK.md`.
+Read-only **buyer** MCP for Mercado Libre: a fork of `@kolmena-ai/meli-mcp` (itself a fork of `@dan1d/mercadolibre-mcp`) cut down to **9 tools** (see README). Nothing may write to Mercado Libre — no questions, cart, purchases, or seller actions. `tests/mcp-server.test.ts` asserts the exact tool list; changing it is a deliberate, reviewed decision.
 
 ## Commands
 
 ```bash
-pnpm build                 # tsc → dist/ (required before running bin/ or inspector)
+pnpm build                 # tsc → dist/ (required before running bin/)
 pnpm test                  # vitest run
-pnpm test:coverage         # vitest run --coverage (v8)
-pnpm exec vitest run tests/seller-actions.test.ts              # single test file
-pnpm exec vitest run -t "name of test"                         # by test name
-pnpm exec tsc --noEmit     # type-check only (CI runs this in addition to build)
-
-pnpm start                 # node bin/mcp-server.mjs (stdio MCP — requires build first)
-pnpm inspector             # MCP Inspector UI, no auth
-MERCADOLIBRE_ACCESS_TOKEN='APP_USR-...' pnpm inspector:auth     # Inspector with token
-pnpm smoke                 # scripts/smoke-all-tools.sh — CLI smoke of every tool via inspector --cli
+pnpm exec tsc --noEmit     # type-check only
+pnpm exec vitest run tests/token-manager.test.ts   # single file
+pnpm auth                  # one-time OAuth authorization (writes token store)
+pnpm start                 # node bin/mcp-server.mjs (stdio)
+pnpm inspector             # MCP Inspector UI
 ```
 
-Package manager is **pnpm 11.x** — no corepack. The major is declared in `engines.pnpm` (`>=11 <12`), which pnpm enforces locally, and the installer version is pinned to the `11` range in `.github/workflows/ci.yml` and the `Dockerfile` (`ARG PNPM_VERSION=11`), so patch updates arrive without a manifest edit. Install via `brew install pnpm@11` or `npm i -g pnpm@11`. CI (`.github/workflows/ci.yml`) runs `pnpm install --frozen-lockfile && pnpm test && pnpm build && pnpm exec tsc --noEmit` on Node 24. Node engine is pinned to `>=24` since Node 18 (EOL April 2025) and Node 20 (EOL April 2026) are no longer supported.
-
-## Auth
-
-Most tools require `MERCADOLIBRE_ACCESS_TOKEN` (OAuth `APP_USR-...`). It is read once at process start from `process.env` in `bin/mcp-server.mjs` and passed to `createMcpServer`. There is no refresh-token logic inside the MCP — that lives upstream of this process (see `HANDOFF.md` "Not in scope").
+CI (`.github/workflows/ci.yml`) runs install, test, build and `tsc --noEmit` on Node 24.
 
 ## Architecture
 
-**Two-layer design.** A pure TypeScript SDK in `src/` that anyone can `import` (entry: `src/index.ts`), wrapped by a thin MCP server adapter (`src/mcp-server.ts` + `bin/mcp-server.mjs`).
-
 ```
-bin/mcp-server.mjs           # stdio entry — reads env, calls createMcpServer
-└── src/mcp-server.ts        # McpServer, registers buyer + seller tool groups
-    ├── src/mcp-tools.ts             # buyer tool registrations (zod schema → handler)
-    ├── src/mcp-seller-tools.ts      # seller tool registrations
-    └── src/index.ts          # createMercadoLibreTools(token) → { tools: {...} }
-        ├── src/client.ts             # MercadoLibreClient (fetch wrapper, 30s timeout, Bearer auth)
-        ├── src/actions.ts            # 9 original buyer actions (search/get_product/...)
-        ├── src/buyer-actions.ts      # 27 extended buyer actions
-        ├── src/seller-actions.ts     # 40 seller actions (seller_*)
-        ├── src/{schemas,buyer-schemas,seller-schemas}.ts   # zod schemas + Params types
-        ├── src/{product,item,seller,seller-listing}-helpers.ts
-        └── src/errors.ts             # MercadoLibreError with isUnauthorized/isNotFound/isRateLimited
+bin/mcp-server.mjs        # shim → dist/cli.js
+src/cli.ts                # stdio (default) or --transport http; builds TokenManager from env
+src/mcp-server.ts         # McpServer + registerMercadoLibreTools
+src/mcp-tools.ts          # the 9 tool registrations (zod shape → toolResult(handler))
+src/index.ts              # createMercadoLibreTools(auth) + BUYER_READONLY_TOOLS
+src/client.ts             # GET-only MercadoLibreClient; inbound-token AsyncLocalStorage; 401 → refresh+retry once
+src/token-manager.ts      # TokenManager, FileTokenStore (lock file), requestToken (/oauth/token)
+src/auth-cli.ts           # `pnpm auth` authorization_code flow (PKCE S256, state)
+src/actions.ts, src/buyer-actions.ts   # action implementations (some unexposed read-only helpers remain as SDK exports)
+src/apify-scraper.ts      # optional web enrichment; disabled without APIFY_TOKEN, fails soft
 ```
 
-`src/listing-types.ts` defines a JSON-value type used by `client.postJson`/`postValidate`/`postMultipart` so listing-creation bodies stay strongly typed.
+### Adding or changing a tool
 
-### Adding a new tool
+Touchpoints: schema (`schemas.ts` / `buyer-schemas.ts`), action, factory in `src/index.ts` + `BUYER_READONLY_TOOLS`, registration in `src/mcp-tools.ts` wrapped in `toolResult()`, and the hard-coded list in `tests/mcp-server.test.ts`. Never add a tool that sends anything other than GET to `api.mercadolibre.com`.
 
-The flow has four touchpoints — miss one and the tool is invisible or untyped:
+### Auth
 
-1. **Schema** — add `*Params` type and zod schema in the relevant `*-schemas.ts`.
-2. **Action** — add the implementation in `actions.ts` / `buyer-actions.ts` / `seller-actions.ts`. Take `(client: MercadoLibreClient, params)` and return `Promise<unknown>`.
-3. **Factory** — wire it into `createMercadoLibreTools` in `src/index.ts` under the right `tools.foo: (params) => fooAction(client, params)` line.
-4. **MCP registration** — call `server.tool(name, description, zodShape, handler)` in `src/mcp-tools.ts` (buyer) or `src/mcp-seller-tools.ts` (seller). Always wrap the handler with the local `toolResult()` helper so thrown errors become `{ isError: true }` MCP responses instead of crashing the transport.
+Token priority per call: inbound `Authorization: Bearer` (HTTP mode) > token store (`~/.config/meli-comprador-mcp/tokens.json`, `MELI_TOKEN_STORE`) > `MERCADOLIBRE_ACCESS_TOKEN`. The refresh token is single-use: every refresh must persist the new one. Renewal is serialized in-process (`inflight` promise) and across processes (`tokens.json.lock`). Never log token values — logs go to stderr (stdout is the stdio JSON-RPC channel).
 
-### Client conventions
+### Catalog vs listing ids
 
-`MercadoLibreClient` is intentionally small. All methods go through `request()` except three special POST shapes:
-- `postJson` — strongly typed JSON body via `MercadoLibreJsonObject` (used for listing creation).
-- `postValidate` — for `/items/validate` style endpoints that return 204 on success and a 400-with-errors body on failure. Returns a `ListingValidationResult` discriminated union instead of throwing.
-- `postMultipart` — for `/pictures/items/upload` (60s timeout). Does **not** set `Content-Type` so the runtime sets the multipart boundary.
+`search_items` uses `/products/search` and returns **catalog product ids**; `/items/{id}` 404s on them. `get_item_description` falls back to `/products/{id}` (`product-helpers.ts`). For a single listing id, `get_listing_offer` reads the website via Apify.
 
-All other failures throw `MercadoLibreError` (method, path, status, raw body). Use its `isNotFound` / `isUnauthorized` / `isRateLimited` getters to branch — the codebase prefers narrowing on these over status-code checks.
+## TypeScript
 
-### Seller ownership invariant
-
-Any seller tool that mutates or reads private item data routes through `assertMyItem` (`src/seller-helpers.ts`), which fetches `/items/{id}` and rejects with a synthetic 403 `MercadoLibreError` if `seller_id` doesn't match the authenticated user. Don't bypass this — write new seller tools through `assertMyItem` (single id) or `resolveSellerId` + filtering (lists).
-
-### Catalog vs listing id gotcha
-
-`search_items` calls `/products/search` and returns **catalog product ids**, not marketplace listing ids — `/items/{id}` will 404 on them. `get_item` and `get_item_description` auto-fall back to `/products/{id}` when they see `isItemNotFoundError` (`product-helpers.ts`). When adding tools that consume "an item id from search," preserve this fallback or document the constraint in the tool description.
-
-### Search workarounds
-
-ML blocks `/sites/{site}/search?q=` for many apps (403). The fork's answer:
-- `search_items` → `/products/search` (catalog, token required, returns catalog ids).
-- `search_buyable_listings` → composite: catalog search → `get_product_buybox` → price filter → optional seller reputation. This is the supported path for "listings under $X."
-- `search_listings` → still tries the legacy endpoint and returns a fallback hint pointing at `search_buyable_listings`.
-
-## TypeScript module setup
-
-`tsconfig.json` is `module: Node16` / ESM with `rootDir: src`, `outDir: dist`, and `declaration: true` (we publish types). Source uses ESM-style `import "./foo.js"` even for `.ts` files — keep that convention or Node16 resolution breaks. Tests live in `tests/` and are **excluded** from `tsconfig.json`; vitest type-checks them via its own pipeline.
-
-`vitest.config.ts` only scopes coverage to `src/**` (excluding `bin/**`). There's no global setup file; tests mock the client directly per-suite.
-
-## Deployment
-
-Production runs `mcp-proxy` (PID 1) → `node bin/mcp-server.mjs` (child, stdio) on port 8000 as `streamable-http`. Token comes from a Kubernetes secret. Image build uses pnpm: install with the lockfile, `pnpm build`, then `pnpm deploy --legacy --prod /prod` to produce a self-contained tree (only prod deps, no symlinks back to the pnpm store). Full details and the mcp-proxy config in `HANDOFF.md`; example proxy config in `config/mcp-proxy.example.json`.
-
-## Reference docs in repo
-
-- `README.md` — buyer workflow, supported sites, programmatic usage.
-- `BUYER-API-ROADMAP.md` / `SELLER-API-ROADMAP.md` — tool inventories with API mappings.
-- `TESTING.md` — MCP Inspector setup and per-tool payload examples.
-- `HANDOFF.md` — deployment steps (Kubernetes / Harbor / Fleet) for the `mcp-meli` service.
-- `FORK.md` — upstream sync flow, package rename, what changed vs `@dan1d/...@1.0.2`.
-- `CHANGELOG.md` — version-by-version diff of tool additions.
+`module: Node16` ESM; import local files as `./foo.js`. Tests in `tests/` are excluded from `tsconfig.json` and mock `fetch` per suite.

@@ -1,4 +1,14 @@
-# Changelog — @kolmena-ai/meli-mcp
+# Changelog — meli-comprador-mcp
+
+## 2.0.0 (fork of @kolmena-ai/meli-mcp 1.10.6)
+
+- **Breaking:** read-only buyer fork. Only `search_items`, `find_offers_for_product_query`, `get_product`, `get_product_buybox`, `get_listing_offer`, `get_item_description`, `get_item_reviews`, `get_seller_info`, `get_item_questions` remain; a test enforces the exact list. `MercadoLibreClient` is GET-only.
+- **Auto-refreshing OAuth tokens:** `pnpm auth` + file token store, refresh 5 min before expiry, rotated refresh token always saved, single retry on 401, renewal serialized across calls and processes.
+- Apify token sent via `Authorization` header.
+
+---
+
+Entries below are from upstream `@kolmena-ai/meli-mcp`.
 
 ## 1.10.6
 

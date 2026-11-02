@@ -1,41 +1,20 @@
-# Kolmena fork
+# Fork
 
-This directory is a fork of [@dan1d/mercadolibre-mcp](https://github.com/dan1d/mercadolibre-mcp) (npm `@dan1d/mercadolibre-mcp@1.0.2`), vendored for Kolmena buyer/seller agents.
+Fork of [KolmenaAI/mercadolibre-mcp](https://github.com/KolmenaAI/mercadolibre-mcp) (`@kolmena-ai/meli-mcp@1.10.6`), itself a fork of [dan1d/mercadolibre-mcp](https://github.com/dan1d/mercadolibre-mcp).
 
-| Item | Value |
-|------|--------|
-| Upstream remote | `upstream` → `https://github.com/dan1d/mercadolibre-mcp.git` |
-| Package name | `@kolmena-ai/meli-mcp` |
-| Shipped binary | `mercadolibre-mcp` and `meli-mcp` (same entrypoint) |
+## What changed vs Kolmena 1.10.6
 
-## Done in this fork
-
-- [x] **36 buyer tools** — see [BUYER-API-ROADMAP.md](./BUYER-API-ROADMAP.md)
-- [x] **37 seller tools** (`seller_*`) — see [SELLER-API-ROADMAP.md](./SELLER-API-ROADMAP.md)
-- [x] `search_buyable_listings`, catalog search, post-purchase buyer suite
-- [x] `meli-buyer` + `meli-seller` skills in kolmena-backend (MCP via `CALL_MCP_TOOL`; `meli-api` deprecated)
-- [x] Local test docs: [TESTING.md](./TESTING.md), `pnpm inspector`, `pnpm smoke`
-- [x] Deploy notes: [HANDOFF.md](./HANDOFF.md)
-
-## Planned next
-
-- [ ] OAuth refresh-token support inside MCP (today: static access token in env/secret)
-- [ ] Harbor image + Fleet PR in `cb-cluster` (ops)
+- Only 9 read-only buyer tools (see README). All `seller_*`, `ask_seller_question`, post-purchase, category/domain/trend/currency tools removed. `MercadoLibreClient` is GET-only.
+- Auto-refreshing OAuth tokens (`src/token-manager.ts`, `pnpm auth` → `src/auth-cli.ts`).
+- Apify token sent as a header instead of a query parameter.
 
 ## Sync from upstream
 
 ```bash
+git remote add upstream https://github.com/KolmenaAI/mercadolibre-mcp.git
 git fetch upstream
-git merge upstream/main   # or cherry-pick specific commits
+git cherry-pick <commit>   # buyer/scraper fixes only; never re-add write tools
 pnpm install && pnpm build && pnpm test
 ```
 
-## Local dev
-
-```bash
-pnpm install
-pnpm build
-MERCADOLIBRE_ACCESS_TOKEN=APP_USR-... pnpm start   # stdio MCP
-```
-
-For HTTP (Bifrost / mcp-proxy), use the config in `config/mcp-proxy.example.json`.
+`tests/mcp-server.test.ts` fails if a merge brings back any tool outside the allowed 9.
