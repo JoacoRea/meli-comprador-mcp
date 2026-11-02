@@ -227,11 +227,12 @@ export class ApifyScraper implements ScraperProvider {
     }
 
     const effectiveTimeout = Math.max(2000, Math.min(timeoutMs ?? this.timeoutMs, this.timeoutMs));
-    const url = `${APIFY_BASE}/${encodeURIComponent(this.actor)}/run-sync-get-dataset-items?token=${encodeURIComponent(this.token)}`;
+    const url = `${APIFY_BASE}/${encodeURIComponent(this.actor)}/run-sync-get-dataset-items`;
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Token in the header, not the query string, so it never shows up in URLs.
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
         body: JSON.stringify(input),
         signal: AbortSignal.timeout(effectiveTimeout),
       });
