@@ -139,7 +139,7 @@ export async function runAuth(env: NodeJS.ProcessEnv = process.env): Promise<voi
   });
   if (!tokens.refresh_token) {
     throw new Error(
-      "ML did not return a refresh_token. Enable the "Refresh Token" OAuth flow in your app settings and run `pnpm auth` again."
+      "ML did not return a refresh_token. Enable the 'Refresh Token' OAuth flow in your app settings and run `pnpm auth` again."
     );
   }
 
