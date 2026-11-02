@@ -24,20 +24,25 @@
  *
  * Token resolution inside a tool call:
  *   1. `Authorization: Bearer <token>` from the inbound request (HTTP only)
- *   2. fallback to MERCADOLIBRE_ACCESS_TOKEN env var (service-account / cron)
- *   3. else no Authorization header is sent — calls that require auth 403.
+ *   2. the auto-refreshing token store written by `pnpm auth`
+ *      (see token-manager.ts; renewed with MELI_CLIENT_ID / MELI_CLIENT_SECRET)
+ *   3. fallback to MERCADOLIBRE_ACCESS_TOKEN env var (static, never renewed)
+ *   4. else no Authorization header is sent — calls that require auth 403.
  */
 import http from "node:http";
 import { parseArgs } from "node:util";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { AccessTokenProvider } from "./client.js";
 import { createMcpServer } from "./mcp-server.js";
+import { tokenManagerFromEnv } from "./token-manager.js";
 
 // Bifrost has this path baked into its MCP client config.
 const HTTP_PATH = "/meli/mcp";
 
 export async function main(): Promise<void> {
-  const staticToken = process.env.MERCADOLIBRE_ACCESS_TOKEN;
+  // stderr, not stdout — the stdio transport reserves stdout for JSON-RPC.
+  const auth = tokenManagerFromEnv(process.env, (line) => console.error(line));
 
   const { values: cliArgs } = parseArgs({
     options: { transport: { type: "string", default: "stdio" } },
@@ -46,14 +51,14 @@ export async function main(): Promise<void> {
   const transportKind = cliArgs.transport;
 
   if (transportKind === "stdio") {
-    const server = createMcpServer(staticToken);
+    const server = createMcpServer(auth);
     const transport = new StdioServerTransport();
     await server.connect(transport);
     return;
   }
 
   if (transportKind === "http") {
-    await runHttp(staticToken);
+    await runHttp(auth);
     return;
   }
 
@@ -61,7 +66,7 @@ export async function main(): Promise<void> {
   process.exit(1);
 }
 
-async function runHttp(staticToken: string | undefined): Promise<void> {
+async function runHttp(auth: AccessTokenProvider): Promise<void> {
   const port = Number(process.env.PORT ?? 8000);
 
   const httpServer = http.createServer(async (req, res) => {
@@ -106,7 +111,7 @@ async function runHttp(staticToken: string | undefined): Promise<void> {
       // getRequestListener, which then writes a default 500 text/plain
       // empty body that our outer try/catch never sees. Constructing a
       // fresh pair per request is the canonical stateless pattern.
-      const server = createMcpServer(staticToken);
+      const server = createMcpServer(auth);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       transport.onerror = (err) => {
         const message = err instanceof Error ? err.message : String(err);

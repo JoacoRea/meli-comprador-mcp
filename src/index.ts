@@ -70,6 +70,7 @@ export function createMercadoLibreTools(auth?: string | AccessTokenProvider) {
 
 export { MercadoLibreClient } from "./client.js";
 export type { AccessTokenProvider } from "./client.js";
+export { TokenManager, FileTokenStore, defaultTokenStorePath } from "./token-manager.js";
 export { MercadoLibreError } from "./errors.js";
 export * from "./actions.js";
 export * from "./buyer-actions.js";
