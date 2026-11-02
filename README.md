@@ -63,6 +63,12 @@ Orden de prioridad del token:
 
 ## Variables de entorno
 
+Se pueden definir de dos formas:
+- En el entorno del proceso (`setx` en Windows, o la config del MCP).
+- En `~/.config/meli-comprador-mcp/config.env`, una línea `NOMBRE=valor` por variable. Si una variable ya está en el entorno, ese valor tiene prioridad.
+
+**Usá `config.env` si abrís Claude Desktop con un lanzador o multi-cuenta.** Esos lanzadores pueden arrancarlo sin tus variables de `setx`. Si pasa eso, no funciona Apify y no se renueva el token. También lo leen `pnpm auth` y `MELI_CONFIG_FILE`, que sirve para usar otra ruta.
+
 | Variable | Para qué |
 | --- | --- |
 | `MELI_CLIENT_ID`, `MELI_CLIENT_SECRET` | App de ML. Necesarias para `pnpm auth` y para renovar. |

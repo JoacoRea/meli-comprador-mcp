@@ -9,13 +9,15 @@
  * 3. Exchanges it at /oauth/token and writes the token store
  *    (default ~/.config/meli-comprador-mcp/tokens.json).
  *
- * Reads MELI_CLIENT_ID, MELI_CLIENT_SECRET, MELI_REDIRECT_URI from env.
+ * Reads MELI_CLIENT_ID, MELI_CLIENT_SECRET, MELI_REDIRECT_URI from env or
+ * ~/.config/meli-comprador-mcp/config.env (see env-file.ts).
  * Never prints tokens or the client secret.
  */
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";
 import { createInterface } from "node:readline/promises";
+import { loadEnvFile } from "./env-file.js";
 import { FileTokenStore, defaultTokenStorePath, requestToken } from "./token-manager.js";
 
 const AUTH_BASE = process.env.MELI_AUTH_URL || "https://auth.mercadolibre.com.ar/authorization";
@@ -151,6 +153,7 @@ export async function runAuth(env: NodeJS.ProcessEnv = process.env): Promise<voi
 
 const invokedDirectly = process.argv[1]?.replace(/\\/g, "/").endsWith("/auth-cli.js");
 if (invokedDirectly) {
+  loadEnvFile();
   runAuth().catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

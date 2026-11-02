@@ -23,7 +23,7 @@ CI (`.github/workflows/ci.yml`) runs install, test, build and `tsc --noEmit` on 
 ## Architecture
 
 ```
-bin/mcp-server.mjs        # shim → dist/cli.js
+bin/mcp-server.mjs        # shim: loads ~/.config/meli-comprador-mcp/config.env (env-file.ts), then dist/cli.js
 src/cli.ts                # stdio (default) or --transport http; builds TokenManager from env
 src/mcp-server.ts         # McpServer + registerMercadoLibreTools
 src/mcp-tools.ts          # the 9 tool registrations (zod shape → toolResult(handler))
