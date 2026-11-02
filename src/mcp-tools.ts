@@ -219,28 +219,6 @@ export function registerMercadoLibreTools(server: McpServer, tools: Tools): void
   );
 
   server.tool(
-    "rank_sellers_for_query",
-    "PRIMARY merchant-ranking tool (e.g. '3 best sellers for MacBook Air with prices'). Returns web_ranked_sellers[] built from live scraped search offers (seller + cheapest price, price_source: web) which works even when official seller-inventory endpoints are blocked, plus the API path (domain_discovery → products/search → buy-box/category sellers → reputation rank → GET /users/{id}/items/search). Does NOT use deprecated GET /sites/search?q=.",
-    {
-      query: z.string(),
-      site_id: z.string().optional(),
-      domain_id: z.string().optional().describe("Catalog domain e.g. MLA-NOTEBOOKS (auto via domain_discovery when omitted)"),
-      price_max: z.number().optional(),
-      price_min: z.number().optional(),
-      catalog_limit: z.number().optional().describe("Catalog products to scan for buy-box sellers (default 20)"),
-      limit: z.number().optional().describe("Category listing scan size when category_id known (default 50)"),
-      top_sellers: z.number().optional().describe("How many sellers to return (default 3)"),
-      listings_per_seller: z.number().optional().describe("Active listings per top seller to inspect (default 50)"),
-      include_seller_ratings: z.boolean().optional(),
-      include_web_offers: z
-        .boolean()
-        .optional()
-        .describe("Include web_ranked_sellers[] from live scraped prices (default true when scraper configured)."),
-    },
-    async (params, extra) => toolResult(() => tools.rank_sellers_for_query(params), extra)()
-  );
-
-  server.tool(
     "get_product",
     "Catalog product datasheet (GET /products/{id}).",
     { product_id: z.string() },
@@ -282,38 +260,6 @@ export function registerMercadoLibreTools(server: McpServer, tools: Tools): void
   );
 
   server.tool(
-    "get_categories",
-    "Top-level categories for a site.",
-    { site_id: z.string().optional() },
-    async (params) => toolResult(() => tools.get_categories(params))()
-  );
-
-  server.tool(
-    "get_category",
-    "Category tree node.",
-    { category_id: z.string() },
-    async (params) => toolResult(() => tools.get_category(params))()
-  );
-
-  server.tool(
-    "get_category_attributes",
-    "Category attribute definitions for spec comparison.",
-    { category_id: z.string() },
-    async (params) => toolResult(() => tools.get_category_attributes(params))()
-  );
-
-  server.tool(
-    "get_domain_discovery",
-    "Map a vague query to catalog domains (GET /sites/{site}/domain_discovery/search).",
-    {
-      query: z.string(),
-      site_id: z.string().optional(),
-      limit: z.number().optional(),
-    },
-    async (params) => toolResult(() => tools.get_domain_discovery(params))()
-  );
-
-  server.tool(
     "get_seller_info",
     "Seller profile and reputation. Set include_catalog:true to also scrape the seller storefront (web_storefront with live catalog + reputation).",
     {
@@ -328,13 +274,6 @@ export function registerMercadoLibreTools(server: McpServer, tools: Tools): void
   );
 
   server.tool(
-    "get_official_store",
-    "Official store metadata.",
-    { store_id: z.number() },
-    async (params) => toolResult(() => tools.get_official_store(params))()
-  );
-
-  server.tool(
     "get_item_questions",
     "Q&A on a listing (GET /questions/search?item=).",
     {
@@ -343,122 +282,5 @@ export function registerMercadoLibreTools(server: McpServer, tools: Tools): void
       offset: z.number().optional(),
     },
     async (params) => toolResult(() => tools.get_item_questions(params))()
-  );
-
-  server.tool(
-    "ask_seller_question",
-    "Post a pre-sale question (POST /questions). Requires buyer token; max 2000 chars.",
-    {
-      item_id: z.string(),
-      text: z.string().max(2000),
-    },
-    async (params) => toolResult(() => tools.ask_seller_question(params))()
-  );
-
-  server.tool(
-    "get_question",
-    "Single question by id.",
-    { question_id: z.number() },
-    async (params) => toolResult(() => tools.get_question(params))()
-  );
-
-  server.tool(
-    "get_trends",
-    "Trending searches for a site.",
-    { site_id: z.string().optional() },
-    async (params) => toolResult(() => tools.get_trends(params))()
-  );
-
-  server.tool(
-    "get_currency_conversion",
-    "FX rate between currencies.",
-    {
-      from: z.string(),
-      to: z.string(),
-      amount: z.number().optional(),
-    },
-    async (params) => toolResult(() => tools.get_currency_conversion(params))()
-  );
-
-  server.tool(
-    "get_me",
-    "Current OAuth user (GET /users/me). Use before buyer order tools.",
-    {},
-    async (_params, extra) => toolResult(() => tools.get_me(), extra)()
-  );
-
-  server.tool(
-    "get_my_orders",
-    "Buyer orders (GET /orders/search?buyer=). Uses /users/me if buyer_id omitted.",
-    {
-      buyer_id: z.number().optional(),
-      status: z.string().optional(),
-      limit: z.number().optional(),
-      offset: z.number().optional(),
-      q: z.string().optional(),
-    },
-    async (params) => toolResult(() => tools.get_my_orders(params))()
-  );
-
-  server.tool(
-    "get_order",
-    "Order detail.",
-    { order_id: z.number() },
-    async (params) => toolResult(() => tools.get_order(params))()
-  );
-
-  server.tool(
-    "get_order_shipments",
-    "Shipments for an order.",
-    { order_id: z.number() },
-    async (params) => toolResult(() => tools.get_order_shipments(params))()
-  );
-
-  server.tool(
-    "get_shipment",
-    "Shipment tracking detail.",
-    { shipment_id: z.number() },
-    async (params) => toolResult(() => tools.get_shipment(params))()
-  );
-
-  server.tool(
-    "get_order_discounts",
-    "Discounts applied to an order.",
-    { order_id: z.number() },
-    async (params) => toolResult(() => tools.get_order_discounts(params))()
-  );
-
-  server.tool(
-    "get_order_feedback",
-    "Feedback state for an order.",
-    { order_id: z.number() },
-    async (params) => toolResult(() => tools.get_order_feedback(params))()
-  );
-
-  server.tool(
-    "search_my_claims",
-    "Post-purchase claims for token user.",
-    {
-      stage: z.string().optional(),
-      status: z.string().optional(),
-      order_id: z.number().optional(),
-      limit: z.number().optional(),
-      offset: z.number().optional(),
-    },
-    async (params) => toolResult(() => tools.search_my_claims(params))()
-  );
-
-  server.tool(
-    "get_claim",
-    "Claim detail (post-purchase/v1).",
-    { claim_id: z.number() },
-    async (params) => toolResult(() => tools.get_claim(params))()
-  );
-
-  server.tool(
-    "get_claim_returns",
-    "Return status for a claim (post-purchase/v2).",
-    { claim_id: z.number() },
-    async (params) => toolResult(() => tools.get_claim_returns(params))()
   );
 }

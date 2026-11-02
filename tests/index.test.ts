@@ -11,25 +11,12 @@ function jsonResponse(data: unknown, status = 200) {
 }
 
 describe("createMercadoLibreTools", () => {
-  it("creates all tool functions including buyer suite", async () => {
-    const { createMercadoLibreTools } = await import("../src/index.js");
+  it("exposes only the read-only buyer tools", async () => {
+    const { createMercadoLibreTools, BUYER_READONLY_TOOLS } = await import("../src/index.js");
     const { tools } = createMercadoLibreTools();
 
-    expect(typeof tools.search_items).toBe("function");
-    expect(typeof tools.find_offers_for_product_query).toBe("function");
-    expect(typeof tools.get_product_buybox).toBe("function");
-    expect(typeof tools.get_listing_offer).toBe("function");
-    expect(typeof tools.rank_sellers_for_query).toBe("function");
-    expect(typeof tools.get_my_orders).toBe("function");
-    expect(typeof tools.search_my_claims).toBe("function");
-    expect(typeof tools.seller_get_me).toBe("function");
-    expect(typeof tools.seller_get_store_snapshot).toBe("function");
-    // Removed tools are no longer in the map.
-    expect(tools.get_item).toBeUndefined();
-    expect(tools.get_items_bulk).toBeUndefined();
-    expect(tools.compare_products).toBeUndefined();
-    expect(tools.search_buyable_listings).toBeUndefined();
-    expect(Object.keys(tools).length).toBeGreaterThanOrEqual(57);
+    expect(Object.keys(tools).sort()).toEqual([...BUYER_READONLY_TOOLS].sort());
+    for (const fn of Object.values(tools)) expect(typeof fn).toBe("function");
   });
 
   it("tools call the API correctly", async () => {
@@ -48,19 +35,8 @@ describe("createMercadoLibreTools", () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ plain_text: "desc" }));
     await tools.get_item_description({ item_id: "MLA1" });
 
-    mockFetch.mockResolvedValueOnce(jsonResponse([]));
-    await tools.get_categories();
-
-    mockFetch.mockResolvedValueOnce(jsonResponse({ id: "MLA1055" }));
-    await tools.get_category({ category_id: "MLA1055" });
-
     mockFetch.mockResolvedValueOnce(jsonResponse({ id: 1 }));
     await tools.get_seller_info({ seller_id: 1 });
 
-    mockFetch.mockResolvedValueOnce(jsonResponse([]));
-    await tools.get_trends();
-
-    mockFetch.mockResolvedValueOnce(jsonResponse({ ratio: 1000 }));
-    await tools.get_currency_conversion({ from: "USD", to: "ARS" });
   });
 });

@@ -5,7 +5,6 @@ import {
   getItemReviews,
   findOffersForProductQuery,
   rankSellersForQuery,
-  askSellerQuestion,
   getMyOrders,
   searchMyClaims,
 } from "../src/buyer-actions.js";
@@ -203,24 +202,6 @@ describe("buyer-actions", () => {
             ],
           }),
         ],
-      });
-    });
-  });
-
-  describe("askSellerQuestion", () => {
-    it("posts question with item_id and text", async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({ id: 99 }));
-
-      await askSellerQuestion(client, {
-        item_id: "MLA123",
-        text: "Is warranty official?",
-      });
-
-      const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
-      expect(init.method).toBe("POST");
-      expect(JSON.parse(init.body as string)).toEqual({
-        text: "Is warranty official?",
-        item_id: "MLA123",
       });
     });
   });

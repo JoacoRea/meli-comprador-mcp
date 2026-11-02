@@ -38,31 +38,38 @@ describe("MCP Server", () => {
     expect(server).toBeDefined();
   });
 
-  it("registers buyer and seller tools", async () => {
+  // Guardrail: this fork is read-only. The list is hard-coded here (not
+  // imported from src) on purpose, so adding any tool — especially one that
+  // writes to Mercado Libre — fails this test until it is reviewed.
+  it("registers exactly the 9 read-only buyer tools", async () => {
     const { client } = await setupMcpClient();
     const result = await client.listTools();
     const names = result.tools.map((t) => t.name).sort();
 
-    expect(names).toContain("find_offers_for_product_query");
-    expect(names).toContain("get_listing_offer");
-    expect(names).toContain("rank_sellers_for_query");
-    // Removed: buyer-inaccessible / decommissioned / legacy tools.
-    expect(names).not.toContain("search_listings");
-    expect(names).not.toContain("search_buyable_listings");
-    expect(names).not.toContain("search_listings_by_seller");
-    expect(names).not.toContain("get_item");
-    expect(names).not.toContain("get_items_bulk");
-    expect(names).not.toContain("compare_products");
-    expect(names).not.toContain("get_product_listings");
-    expect(names).not.toContain("get_item_shipping_options");
-    expect(names).not.toContain("get_item_sale_terms");
-    expect(names).not.toContain("get_seller_response_time");
-    expect(names).toContain("get_my_orders");
-    expect(names).toContain("seller_get_me");
-    expect(names).toContain("seller_get_store_snapshot");
-    expect(names).toContain("seller_search_orders");
-    expect(names.length).toBeGreaterThanOrEqual(58);
+    expect(names).toEqual(
+      [
+        "find_offers_for_product_query",
+        "get_item_description",
+        "get_item_questions",
+        "get_item_reviews",
+        "get_listing_offer",
+        "get_product",
+        "get_product_buybox",
+        "get_seller_info",
+        "search_items",
+      ].sort()
+    );
+    expect(names.some((n) => n.startsWith("seller_"))).toBe(false);
+    expect(names).not.toContain("ask_seller_question");
 
+    await client.close();
+  });
+
+  it("BUYER_READONLY_TOOLS matches the registered tools", async () => {
+    const { BUYER_READONLY_TOOLS } = await import("../src/index.js");
+    const { client } = await setupMcpClient();
+    const result = await client.listTools();
+    expect(result.tools.map((t) => t.name).sort()).toEqual([...BUYER_READONLY_TOOLS].sort());
     await client.close();
   });
 
@@ -88,25 +95,6 @@ describe("MCP Server", () => {
       await client.close();
     });
 
-    it("get_categories returns categories", async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse([{ id: "MLA1055" }]));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_categories", arguments: {} });
-      const text = (result.content as Array<{ text: string }>)[0].text;
-      expect(JSON.parse(text)).toHaveLength(1);
-      await client.close();
-    });
-
-    it("get_category returns category details", async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({ id: "MLA1055", name: "Electronics" }));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_category", arguments: { category_id: "MLA1055" } });
-      const text = (result.content as Array<{ text: string }>)[0].text;
-      expect(JSON.parse(text).name).toBe("Electronics");
-      await client.close();
-    });
 
     it("get_seller_info returns seller", async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ id: 123, nickname: "SELLER" }));
@@ -115,26 +103,6 @@ describe("MCP Server", () => {
       const result = await client.callTool({ name: "get_seller_info", arguments: { seller_id: 123 } });
       const text = (result.content as Array<{ text: string }>)[0].text;
       expect(JSON.parse(text).nickname).toBe("SELLER");
-      await client.close();
-    });
-
-    it("get_trends returns trends", async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse([{ keyword: "iphone" }]));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_trends", arguments: {} });
-      const text = (result.content as Array<{ text: string }>)[0].text;
-      expect(JSON.parse(text)[0].keyword).toBe("iphone");
-      await client.close();
-    });
-
-    it("get_currency_conversion returns conversion", async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({ ratio: 1250.5 }));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_currency_conversion", arguments: { from: "USD", to: "ARS", amount: 100 } });
-      const text = (result.content as Array<{ text: string }>)[0].text;
-      expect(JSON.parse(text).converted).toBe(125050);
       await client.close();
     });
   });
@@ -159,47 +127,12 @@ describe("MCP Server", () => {
       await client.close();
     });
 
-    it("get_categories returns error on failure", async () => {
-      mockFetch.mockResolvedValueOnce(new Response("Error", { status: 500 }));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_categories", arguments: {} });
-      expect(result.isError).toBe(true);
-      await client.close();
-    });
-
-    it("get_category returns error on failure", async () => {
-      mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_category", arguments: { category_id: "INVALID" } });
-      expect(result.isError).toBe(true);
-      await client.close();
-    });
 
     it("get_seller_info returns error on failure", async () => {
       mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
       const { client } = await setupMcpClient();
 
       const result = await client.callTool({ name: "get_seller_info", arguments: { seller_id: 999 } });
-      expect(result.isError).toBe(true);
-      await client.close();
-    });
-
-    it("get_trends returns error on failure", async () => {
-      mockFetch.mockResolvedValueOnce(new Response("Error", { status: 500 }));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_trends", arguments: {} });
-      expect(result.isError).toBe(true);
-      await client.close();
-    });
-
-    it("get_currency_conversion returns error on failure", async () => {
-      mockFetch.mockResolvedValueOnce(new Response("Error", { status: 500 }));
-      const { client } = await setupMcpClient();
-
-      const result = await client.callTool({ name: "get_currency_conversion", arguments: { from: "USD", to: "ARS" } });
       expect(result.isError).toBe(true);
       await client.close();
     });

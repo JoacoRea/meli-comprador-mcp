@@ -1,7 +1,7 @@
 {
-  "name": "@kolmena-ai/meli-mcp",
-  "version": "1.10.6",
-  "description": "Kolmena MercadoLibre MCP — buyer and seller tools: search, store ops, listings, orders, Q&A, claims.",
+  "name": "meli-comprador-mcp",
+  "version": "2.0.0",
+  "description": "Read-only Mercado Libre buyer MCP: search, offers, listings, reviews, seller reputation and Q&A, with auto-refreshing OAuth tokens and optional Apify web enrichment.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -17,8 +17,7 @@
     "LICENSE"
   ],
   "bin": {
-    "mercadolibre-mcp": "./bin/mcp-server.mjs",
-    "meli-mcp": "./bin/mcp-server.mjs"
+    "meli-comprador-mcp": "./bin/mcp-server.mjs"
   },
   "scripts": {
     "build": "tsc",
@@ -27,18 +26,10 @@
     "start": "node bin/mcp-server.mjs",
     "inspector": "pnpm build && pnpm dlx @modelcontextprotocol/inspector node bin/mcp-server.mjs",
     "inspector:auth": "pnpm build && pnpm dlx @modelcontextprotocol/inspector -e MERCADOLIBRE_ACCESS_TOKEN=\"${MERCADOLIBRE_ACCESS_TOKEN}\" -- node bin/mcp-server.mjs",
-    "smoke": "bash scripts/smoke-all-tools.sh"
+    "auth": "tsc && node dist/auth-cli.js"
   },
-  "author": "KolmenaAI",
+  "author": "dan1d, KolmenaAI, JoacoRea",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/KolmenaAI/mercadolibre-mcp.git"
-  },
-  "homepage": "https://github.com/KolmenaAI/mercadolibre-mcp#readme",
-  "bugs": {
-    "url": "https://github.com/KolmenaAI/mercadolibre-mcp/issues"
-  },
   "engines": {
     "node": ">=24",
     "pnpm": ">=11 <12"

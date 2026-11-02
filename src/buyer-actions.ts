@@ -23,7 +23,6 @@ import {
   type SitesSearchListing,
 } from "./buyer-seller-ranking.js";
 import type {
-  AskSellerQuestionParams,
   FindOffersForProductQueryParams,
   GetCategoryAttributesParams,
   GetClaimParams,
@@ -403,19 +402,6 @@ export async function getItemQuestions(
     qp.offset = String(params.offset);
   }
   return client.get("/questions/search", qp);
-}
-
-export async function askSellerQuestion(
-  client: MercadoLibreClient,
-  params: AskSellerQuestionParams
-): Promise<unknown> {
-  if (params.text.length > 2000) {
-    throw new Error("Question text must be at most 2000 characters");
-  }
-  return client.post("/questions", {
-    text: params.text,
-    item_id: params.item_id,
-  });
 }
 
 export async function getQuestion(

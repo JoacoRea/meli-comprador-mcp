@@ -31,11 +31,6 @@ export interface GetItemQuestionsParams {
   offset?: number;
 }
 
-export interface AskSellerQuestionParams {
-  item_id: string;
-  text: string;
-}
-
 export interface GetQuestionParams {
   question_id: number;
 }

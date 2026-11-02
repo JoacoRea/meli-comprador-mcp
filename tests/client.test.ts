@@ -16,14 +16,6 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
-function noContentResponse(): Response {
-  return {
-    status: 204,
-    ok: true,
-    text: async () => "",
-  } as Response;
-}
-
 describe("MercadoLibreClient", () => {
   beforeEach(() => {
     mockFetch.mockReset();
@@ -101,58 +93,6 @@ describe("MercadoLibreClient", () => {
 
     const result = await client.get("/items/MLA999");
     expect(result).toEqual(data);
-  });
-
-  it("postValidate returns valid on 204", async () => {
-    const client = new MercadoLibreClient("TOKEN");
-    mockFetch.mockResolvedValueOnce(noContentResponse());
-
-    const result = await client.postValidate("/items/validate", {
-      title: "Test",
-      category_id: "MLA1",
-      price: 10,
-      currency_id: "ARS",
-      available_quantity: 1,
-      buying_mode: "buy_it_now",
-      listing_type_id: "gold_special",
-    });
-    expect(result).toEqual({ valid: true, status: 204 });
-  });
-
-  it("postValidate returns errors on 400", async () => {
-    const client = new MercadoLibreClient("TOKEN");
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse({ message: "validation_error", cause: [] }, 400)
-    );
-
-    const result = await client.postValidate("/items/validate", {
-      title: "Test",
-      category_id: "MLA1",
-      price: 10,
-      currency_id: "ARS",
-      available_quantity: 1,
-      buying_mode: "buy_it_now",
-      listing_type_id: "gold_special",
-    });
-    expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.status).toBe(400);
-    }
-  });
-
-  it("sends POST with JSON body", async () => {
-    const client = new MercadoLibreClient("TOKEN");
-    mockFetch.mockResolvedValueOnce(jsonResponse({ id: 1 }));
-
-    await client.post("/questions", { text: "Hi", item_id: "MLA1" });
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.mercadolibre.com/questions",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ text: "Hi", item_id: "MLA1" }),
-      })
-    );
   });
 
   it("keeps per-request access tokens isolated under concurrency", async () => {

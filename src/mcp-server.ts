@@ -1,18 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { AccessTokenProvider } from "./client.js";
 import { createMercadoLibreTools } from "./index.js";
 import { registerMercadoLibreTools } from "./mcp-tools.js";
-import { registerSellerMercadoLibreTools } from "./mcp-seller-tools.js";
 
-export function createMcpServer(accessToken?: string) {
-  const { tools } = createMercadoLibreTools(accessToken);
+export function createMcpServer(auth?: string | AccessTokenProvider) {
+  const { tools } = createMercadoLibreTools(auth);
 
   const server = new McpServer({
-    name: "mercadolibre-mcp",
-    version: "1.6.6",
+    name: "meli-comprador-mcp",
+    version: "2.0.0",
   });
 
   registerMercadoLibreTools(server, tools);
-  registerSellerMercadoLibreTools(server, tools);
 
   return server;
 }

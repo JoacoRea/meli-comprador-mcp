@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from "async_hooks";
 import { createHash } from "node:crypto";
 import { MercadoLibreError } from "./errors.js";
-import type { MercadoLibreJsonObject, MercadoLibreJsonValue } from "./listing-types.js";
 
 const BASE_URL = "https://api.mercadolibre.com";
 
@@ -95,147 +94,88 @@ export function getRequestAccessToken(): string | undefined {
   return requestAccessTokenStorage.getStore()?.accessToken;
 }
 
-export interface ListingValidationSuccess {
-  valid: true;
-  status: 204;
+/**
+ * Source of OAuth access tokens that can renew itself (see
+ * `TokenManager` in token-manager.ts).
+ */
+export interface AccessTokenProvider {
+  /** A token that is valid for at least the next few minutes, if any. */
+  getAccessToken(): Promise<string | undefined>;
+  /**
+   * Called after ML answered 401 to a request sent with `staleToken`.
+   * Returns a renewed token, or undefined when renewal is not possible.
+   */
+  forceRefresh(staleToken: string | undefined): Promise<string | undefined>;
 }
 
-export interface ListingValidationFailure {
-  valid: false;
-  status: number;
-  errors: MercadoLibreJsonValue;
-}
-
-export type ListingValidationResult = ListingValidationSuccess | ListingValidationFailure;
-
+/**
+ * Read-only MercadoLibre REST client (GET only).
+ *
+ * Token resolution per request:
+ *   1. the inbound `Authorization: Bearer` of the current MCP request (HTTP mode)
+ *   2. the `AccessTokenProvider` (auto-refreshing token store) or static token
+ *
+ * When the token came from a provider and ML answers 401, the provider is
+ * asked to renew and the request is retried exactly once.
+ */
 export class MercadoLibreClient {
-  private accessToken?: string;
+  private readonly staticToken?: string;
+  private readonly provider?: AccessTokenProvider;
 
-  constructor(accessToken?: string) {
-    this.accessToken = accessToken;
+  constructor(auth?: string | AccessTokenProvider) {
+    if (typeof auth === "string") {
+      this.staticToken = auth;
+    } else if (auth) {
+      this.provider = auth;
+    }
   }
 
-  private headers(): Record<string, string> {
+  private headers(token: string | undefined): Record<string, string> {
     const h: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    const requestAccessToken = requestAccessTokenStorage.getStore()?.accessToken;
-    const effectiveAccessToken = requestAccessToken ?? this.accessToken;
-    if (effectiveAccessToken) {
-      h.Authorization = `Bearer ${effectiveAccessToken}`;
+    if (token) {
+      h.Authorization = `Bearer ${token}`;
     }
     return h;
   }
 
   async get<T = unknown>(path: string, params?: Record<string, string>): Promise<T> {
-    return this.request<T>("GET", path, { params });
-  }
-
-  async post<T = unknown>(
-    path: string,
-    body: Record<string, string | number | boolean | Record<string, unknown>>,
-    params?: Record<string, string>
-  ): Promise<T> {
-    return this.request<T>("POST", path, { body, params });
-  }
-
-  async put<T = unknown>(
-    path: string,
-    body: Record<string, string | number | boolean | null | Record<string, unknown>>
-  ): Promise<T> {
-    return this.request<T>("PUT", path, { body });
-  }
-
-  async postJson<T = unknown>(path: string, body: MercadoLibreJsonObject): Promise<T> {
-    return this.request<T>("POST", path, { jsonBody: body });
-  }
-
-  async postValidate(path: string, body: MercadoLibreJsonObject): Promise<ListingValidationResult> {
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
-    });
-    if (res.status === 204) {
-      return { valid: true, status: 204 };
-    }
-    const responseBody = await res.text();
-    if (!res.ok) {
-      let errors: MercadoLibreJsonValue = responseBody;
-      try {
-        errors = JSON.parse(responseBody) as MercadoLibreJsonValue;
-      } catch {
-        // keep raw text
-      }
-      return { valid: false, status: res.status, errors };
-    }
-    let errors: MercadoLibreJsonValue = responseBody;
-    if (responseBody.trim() !== "") {
-      try {
-        errors = JSON.parse(responseBody) as MercadoLibreJsonValue;
-      } catch {
-        // keep raw text
-      }
-    }
-    return { valid: false, status: res.status, errors };
-  }
-
-  async postMultipart<T = unknown>(path: string, formData: FormData): Promise<T> {
-    const headers: Record<string, string> = {};
-    const requestAccessToken = requestAccessTokenStorage.getStore()?.accessToken;
-    const effectiveAccessToken = requestAccessToken ?? this.accessToken;
-    if (effectiveAccessToken) {
-      headers.Authorization = `Bearer ${effectiveAccessToken}`;
-    }
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method: "POST",
-      headers,
-      body: formData,
-      signal: AbortSignal.timeout(60000),
-    });
-    if (!res.ok) {
-      const responseBody = await res.text();
-      throw new MercadoLibreError(
-        "POST",
-        path,
-        res.status,
-        responseBody,
-        headersToObject(res.headers)
-      );
-    }
-    return res.json() as Promise<T>;
-  }
-
-  async request<T = unknown>(
-    method: "GET" | "POST" | "PUT",
-    path: string,
-    options?: {
-      params?: Record<string, string>;
-      body?: Record<string, string | number | boolean | null | Record<string, unknown>>;
-      jsonBody?: MercadoLibreJsonObject;
-    }
-  ): Promise<T> {
     let url = `${BASE_URL}${path}`;
-    if (options?.params) {
-      const qs = new URLSearchParams(options.params).toString();
+    if (params) {
+      const qs = new URLSearchParams(params).toString();
       if (qs) url += `?${qs}`;
     }
-    const init: RequestInit = {
-      method,
-      headers: this.headers(),
-      signal: AbortSignal.timeout(30000),
-    };
-    if ((method === "POST" || method === "PUT") && options?.jsonBody) {
-      init.body = JSON.stringify(options.jsonBody);
-    } else if ((method === "POST" || method === "PUT") && options?.body) {
-      init.body = JSON.stringify(options.body);
+
+    const requestAccessToken = requestAccessTokenStorage.getStore()?.accessToken;
+    if (requestAccessToken) {
+      return this.send<T>(url, path, requestAccessToken);
     }
-    const res = await fetch(url, init);
+    if (!this.provider) {
+      return this.send<T>(url, path, this.staticToken);
+    }
+
+    const token = await this.provider.getAccessToken();
+    try {
+      return await this.send<T>(url, path, token);
+    } catch (error) {
+      if (!(error instanceof MercadoLibreError) || !error.isUnauthorized) throw error;
+      const renewed = await this.provider.forceRefresh(token);
+      if (!renewed || renewed === token) throw error;
+      return this.send<T>(url, path, renewed);
+    }
+  }
+
+  private async send<T>(url: string, path: string, token: string | undefined): Promise<T> {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: this.headers(token),
+      signal: AbortSignal.timeout(30000),
+    });
     if (!res.ok) {
       const responseBody = await res.text();
       throw new MercadoLibreError(
-        method,
+        "GET",
         path,
         res.status,
         responseBody,
