@@ -56,6 +56,15 @@ const MAX_SCRAPE_LIMIT = 5;
  */
 const WEB_DETAIL_TIMEOUT_MS = Number(process.env.WEB_DETAIL_TIMEOUT_MS) || 20000;
 
+/**
+ * Total time get_listing_offer may spend scraping. MCP clients time out tool
+ * calls at ~60s, so the listing attempt and the catalog-page retry share this
+ * budget instead of each getting the full per-call Apify timeout.
+ */
+const LISTING_OFFER_BUDGET_MS = 50_000;
+/** First (listing-page) attempt for a bare id, leaving room for the catalog retry. */
+const LISTING_FIRST_ATTEMPT_MS = 25_000;
+
 /** Build an offer row from a scraped web result so web + API offers share one shape. */
 function webOfferRow(
   source: { catalog_product_id: string; catalog_name?: string },
@@ -219,7 +228,27 @@ export async function getListingOffer(
     };
   }
 
-  const scraped = await scraper.scrapeProduct(url, { site_id: site });
+  const started = Date.now();
+  const retryable = !isUrl && itemId !== null;
+  let scraped = await scraper.scrapeProduct(url, {
+    site_id: site,
+    timeoutMs: retryable ? LISTING_FIRST_ATTEMPT_MS : LISTING_OFFER_BUDGET_MS,
+  });
+  let resolvedAs: "listing" | "catalog_product" = "listing";
+  let scrapedUrl = url;
+  // Listing ids and catalog product ids share the same shape (MLA + digits), so
+  // a bare id that yields nothing as a listing is retried as a catalog page.
+  if (!scraped && retryable && itemId) {
+    const catalogUrl = catalogProductUrl(itemId, site);
+    const remaining = LISTING_OFFER_BUDGET_MS - (Date.now() - started);
+    if (catalogUrl && remaining > 5_000) {
+      scraped = await scraper.scrapeProduct(catalogUrl, { site_id: site, timeoutMs: remaining });
+      if (scraped) {
+        resolvedAs = "catalog_product";
+        scrapedUrl = catalogUrl;
+      }
+    }
+  }
   if (!scraped) {
     return {
       requested: raw,
@@ -227,17 +256,20 @@ export async function getListingOffer(
       url,
       offer: null,
       price_source: null,
-      note: "The listing page returned no live price (it may be sold out, paused, or not scrapeable). Try find_offers_for_product_query with the product name.",
+      note: "Neither the listing page nor the catalog product page returned a live price (it may be sold out, paused, or not scrapeable). Try find_offers_for_product_query with the product name.",
     };
   }
 
+  const offerItemId = resolvedAs === "listing" ? itemId : null;
   return {
     requested: raw,
-    item_id: itemId,
-    url: scraped.url ?? url,
+    resolved_as: resolvedAs,
+    item_id: offerItemId,
+    ...(resolvedAs === "catalog_product" ? { catalog_product_id: itemId } : {}),
+    url: scraped.url ?? scrapedUrl,
     price_source: "web",
     offer: {
-      item_id: itemId,
+      item_id: offerItemId,
       title: scraped.title,
       price: scraped.price,
       original_price: scraped.original_price,
@@ -261,11 +293,15 @@ export async function getListingOffer(
             is_official_store: scraped.is_official_store,
           }
         : null,
-      permalink: scraped.url ?? url,
+      permalink: scraped.url ?? scrapedUrl,
       price_source: "web",
       scraped_at: scraped.scraped_at,
     },
-    note: "Live website data for this specific listing (price_source: web). Exact shipping cost depends on the buyer's address; free_shipping reflects what the page shows.",
+    note:
+      (resolvedAs === "catalog_product"
+        ? "The id is a catalog product, not a listing: this is the catalog page's current best offer (price_source: web). "
+        : "Live website data for this specific listing (price_source: web). ") +
+      "Delivery dates/regions reflect the scraper's location, not the buyer's; free_shipping reflects what the page shows.",
   };
 }
 

@@ -354,6 +354,103 @@ describe("enrichment wiring", () => {
     expect(seenUrl).toBe("https://articulo.mercadolibre.com.ar/MLA-1804763057-_JM");
   });
 
+  it("getListingOffer retries a bare id as a catalog product page when the listing page has no price", async () => {
+    const seen: string[] = [];
+    const scraper: ScraperProvider = {
+      enabled: true,
+      async scrapeProduct(url: string): Promise<ScrapedOffer | null> {
+        seen.push(url);
+        return url.includes("/p/") ? WEB_OFFER : null;
+      },
+      async scrapeSearch(): Promise<ScrapedSearchResult[]> {
+        return [];
+      },
+      async scrapeSeller(): Promise<ScrapedSeller | null> {
+        return null;
+      },
+      async scrapeReviews(): Promise<ScrapedReview[]> {
+        return [];
+      },
+    };
+
+    const result = (await getListingOffer({ listing: "MLA28305736" }, scraper)) as {
+      resolved_as: string;
+      item_id: string | null;
+      catalog_product_id: string;
+      offer: { price: number; item_id: string | null } | null;
+    };
+
+    expect(seen).toEqual([
+      "https://articulo.mercadolibre.com.ar/MLA-28305736-_JM",
+      "https://www.mercadolibre.com.ar/p/MLA28305736",
+    ]);
+    expect(result.resolved_as).toBe("catalog_product");
+    expect(result.catalog_product_id).toBe("MLA28305736");
+    expect(result.item_id).toBeNull();
+    expect(result.offer).toMatchObject({ price: 1265000, item_id: null });
+  });
+
+  it("getListingOffer keeps both attempts inside the ~60s MCP call budget", async () => {
+    let now = 0;
+    const timeouts: Array<number | undefined> = [];
+    const scraper: ScraperProvider = {
+      enabled: true,
+      async scrapeProduct(_url: string, opts?: { timeoutMs?: number }): Promise<ScrapedOffer | null> {
+        timeouts.push(opts?.timeoutMs);
+        // Simulate the attempt running until its timeout.
+        now += opts?.timeoutMs ?? 0;
+        return null;
+      },
+      async scrapeSearch(): Promise<ScrapedSearchResult[]> {
+        return [];
+      },
+      async scrapeSeller(): Promise<ScrapedSeller | null> {
+        return null;
+      },
+      async scrapeReviews(): Promise<ScrapedReview[]> {
+        return [];
+      },
+    };
+
+    const start = 1_000_000;
+    now = start;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      await getListingOffer({ listing: "MLA28305736" }, scraper);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(timeouts).toEqual([25_000, 25_000]);
+    expect(now - start).toBeLessThanOrEqual(50_000);
+  });
+
+  it("getListingOffer does not retry as catalog when a full URL was pasted", async () => {
+    const seen: string[] = [];
+    const scraper: ScraperProvider = {
+      enabled: true,
+      async scrapeProduct(url: string): Promise<ScrapedOffer | null> {
+        seen.push(url);
+        return null;
+      },
+      async scrapeSearch(): Promise<ScrapedSearchResult[]> {
+        return [];
+      },
+      async scrapeSeller(): Promise<ScrapedSeller | null> {
+        return null;
+      },
+      async scrapeReviews(): Promise<ScrapedReview[]> {
+        return [];
+      },
+    };
+
+    const result = (await getListingOffer(
+      { listing: "https://articulo.mercadolibre.com.ar/MLA-1-x-_JM" },
+      scraper
+    )) as { offer: unknown };
+    expect(seen).toHaveLength(1);
+    expect(result.offer).toBeNull();
+  });
+
   it("getListingOffer passes a full pasted URL straight to the scraper", async () => {
     let seenUrl: string | null = null;
     const pasted = "https://articulo.mercadolibre.com.ar/MLA-1804763057-algo-_JM";

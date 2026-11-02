@@ -208,7 +208,7 @@ export function registerMercadoLibreTools(server: McpServer, tools: Tools): void
 
   server.tool(
     "get_listing_offer",
-    "Read price + shipping + seller for ONE specific listing the user pastes by id or URL (e.g. 'pasame el precio y envío de MLA1804763057' or a listing link). Pass the id (MLA…) or full URL in `listing`. Returns live website data (price_source: web): price, installments, free_shipping/shipping, condition, availability and seller. There is NO catalog/API tool for a bare listing id (get_item is gone) — use this for a single known publication; use find_offers_for_product_query when the user names a product instead. Exact shipping cost depends on the buyer address; free_shipping reflects what the page shows.",
+    "Read price + shipping + seller for ONE specific listing the user pastes by id or URL (e.g. 'pasame el precio y envío de MLA1804763057' or a listing link). Pass the id (MLA…) or full URL in `listing`. Returns live website data (price_source: web): price, installments, free_shipping/shipping, condition, availability and seller. There is NO catalog/API tool for a bare listing id (get_item is gone) — use this for a single known publication; use find_offers_for_product_query when the user names a product instead. A bare catalog product id (e.g. from search_items) also works: it falls back to the catalog page's best offer (resolved_as: catalog_product). Delivery dates reflect the scraper's location, not the buyer's; free_shipping reflects what the page shows.",
     {
       listing: z
         .string()
