@@ -33,7 +33,8 @@ pnpm test
 
 1. Creá una app en [developers.mercadolibre.com.ar](https://developers.mercadolibre.com.ar/devcenter) con:
    - **Redirect URI**: `https://example.com/meli-callback`. ML exige `https://` con un dominio público (rechaza `localhost`). Tiene que coincidir **exactamente** con `MELI_REDIRECT_URI`.
-   - **Scopes**: lectura y `offline_access`. Sin `offline_access` ML no devuelve refresh token.
+   - **Flujos OAuth**: `Authorization Code` y `Refresh Token` (sin este último ML no devuelve refresh token). `Client Credentials` no hace falta.
+   - **PKCE**: activado. **Negocios**: Mercado Libre. **Permisos**: Usuarios en lectura (o lo que venga fijo); el resto "Sin acceso". **Tópicos**: ninguno.
 2. Definí las variables en tu terminal. No las pegues en ningún chat.
 3. Corré:
 
