@@ -32,7 +32,7 @@ pnpm test
 ## Autorizar Mercado Libre (una sola vez)
 
 1. Creá una app en [developers.mercadolibre.com.ar](https://developers.mercadolibre.com.ar/devcenter) con:
-   - **Redirect URI**: por ejemplo `https://localhost:8080/callback`. Tiene que coincidir **exactamente** con `MELI_REDIRECT_URI`.
+   - **Redirect URI**: `https://example.com/meli-callback`. ML exige `https://` con un dominio público (rechaza `localhost`). Tiene que coincidir **exactamente** con `MELI_REDIRECT_URI`.
    - **Scopes**: lectura y `offline_access`. Sin `offline_access` ML no devuelve refresh token.
 2. Definí las variables en tu terminal. No las pegues en ningún chat.
 3. Corré:
@@ -41,9 +41,9 @@ pnpm test
    pnpm auth
    ```
 
-   Se abre el navegador. Iniciá sesión y autorizá. ML te redirige a la Redirect URI.
-   - Si es `http://localhost:<puerto>/…`, el script captura el código solo.
-   - Si no, por ejemplo `https://localhost:…`, el navegador muestra un error de conexión. Es normal. Copiá la URL completa de la barra de direcciones y pegala en la terminal.
+   Se abre el navegador. Iniciá sesión y autorizá. ML te redirige a `https://example.com/meli-callback?code=…&state=…` y ves la página "Example Domain". Copiá la URL completa de la barra de direcciones y pegala en la terminal.
+
+   Usar `example.com` es seguro: el `code` es de un solo uso y no sirve sin tu `client_secret` y el verificador PKCE, que nunca salen de tu máquina. Si tenés un dominio propio, podés usarlo igual.
 
 Los tokens se guardan en `~/.config/meli-comprador-mcp/tokens.json`, fuera del repo. En Windows es `%USERPROFILE%\.config\meli-comprador-mcp\tokens.json`.
 
